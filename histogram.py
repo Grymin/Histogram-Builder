@@ -1,20 +1,12 @@
-import csv
 import easygui
-import os
-import tkinter as tk
-from tkinter import ttk
-from PIL import Image, ImageTk
 import math
-import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-
-# TODO scientific format checkbox
-# TODO Ramka checkbox + Entry
-# TODO zapis w innym miejscu
-# TODO Odczyt z okienek
-# TODO aktualizacja wartości w oknie
+import numpy as np
+import os
+import shutil
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from PIL import Image, ImageTk
 
 # TODO - for smaller values, in rounding take magnitude.
 #  Rounding is necessary to exclude binary rounding (1.000000004 etc.)
@@ -36,9 +28,6 @@ class Histogram:
         self.root.title("File Manager")
 
         # PARAMETERS
-        self.scientific_format = [0, 0]         # Scientific format on x/y
-        self.podpisy = ["-", "-"]               # Labels on x/y
-        self.ramka = "A"                        # Frame with symbol of the drawing
         self.data = np.empty((0, 0))            # Data
 
         self.len = None                         # Size of data
@@ -52,12 +41,16 @@ class Histogram:
         self.end = None                         # Max x value on the x-axis
         self.bins = None                        # Number of the bins
         self.bins_list = None                   # List of the bins
-        self.dens = None                # Density of the ticks on the x-axis
+        self.dens = None                        # Density of the ticks on the x-axis
+        self.xtitle, self.ytitle = None, None   # Titles on x and y axis
 
-        self.min_str = tk.StringVar()
-        self.max_str = tk.StringVar()
-        self.bins_str = tk.StringVar()
-        self.dens_str = tk.StringVar()
+        # Booleans
+        self.normalized = tk.BooleanVar()       # Normalized histogram? Bool value
+
+        # String values
+        self.frame = tk.StringVar()
+        self.xtitle = tk.StringVar()
+        self.ytitle = tk.StringVar()
 
         # File path
         self.fpath = None
@@ -75,41 +68,58 @@ class Histogram:
         self.but_show = tk.Button(height=but_h, width=but_w, bg=but_bg,
                                   command=lambda: self.draw_histogram(), text="Graph that!", state="disabled")
         self.but_save_hist = tk.Button(height=but_h, width=but_w, bg=but_bg,
-                                       command=lambda: self.draw_histogram(), text="Save histogram", state="disabled")
+                                       command=lambda: self.save_histogram(), text="Save histogram", state="disabled")
 
         # Defintion of textboxes and entries - disabled before defining the file
         self.tb_min_desc = tk.Label(self.root, text="Min:", state='disabled')
-        self.tb_min = tk.Entry(self.root, textvariable=self.min_str, state='disabled')
+        self.tb_min = tk.Entry(self.root, textvariable=self.min, state='disabled')
 
         self.tb_max_desc = tk.Label(self.root, text="Max:", state='disabled')
-        self.tb_max = tk.Entry(self.root, textvariable=self.max_str, state='disabled')
+        self.tb_max = tk.Entry(self.root, textvariable=self.max, state='disabled')
 
         self.tb_bins_desc = tk.Label(self.root, text="Bins:", state='disabled')
-        self.tb_bins = tk.Entry(self.root, textvariable=self.bins_str, state='disabled')
+        self.tb_bins = tk.Entry(self.root, textvariable=self.bins, state='disabled')
 
         self.tb_dens_desc = tk.Label(self.root, text="Density of x main lines:", state='disabled')
-        self.tb_dens = tk.Entry(self.root, textvariable=self.dens_str, state='disabled')
+        self.tb_dens = tk.Entry(self.root, textvariable=self.dens, state='disabled')
 
-        self.tb_savefile = tk.Entry(self.root, state='disabled')
+        self.tb_frame_desc = tk.Label(self.root, text="Frame", state='disabled')
+        self.tb_frame = tk.Entry(self.root, textvariable=self.frame, state='disabled')
+
+        self.tb_xtitle_desc = tk.Label(self.root, text="X Title", state='disabled')
+        self.tb_xtitle = tk.Entry(self.root, textvariable=self.xtitle, state='disabled')
+        self.tb_ytitle_desc = tk.Label(self.root, text="Y Title", state='disabled')
+        self.tb_ytitle = tk.Entry(self.root, textvariable=self.ytitle, state='disabled')
+
+        # Checkbox
+        self.cb_normalized = tk.Checkbutton(self.root, text="Normalized?",
+                                            variable=self.normalized)
 
         # Positions of buttons / textboxes / entries
         px = 5
         py = 30
         self.but_choose_file.grid(row=1, column=1, padx=px, pady=py)
         self.but_show.grid(row=2, column=1, padx=px, pady=py)
-        self.but_save_hist.grid(row=9, column=1, padx=px, pady=py)
+        self.but_save_hist.grid(row=12, column=1, padx=px, pady=py)
 
         self.tb_min_desc.grid(row=3, column=1)
         self.tb_max_desc.grid(row=4, column=1)
         self.tb_bins_desc.grid(row=5, column=1)
         self.tb_dens_desc.grid(row=6, column=1)
+        self.tb_frame_desc.grid(row=7, column=1)
+        self.tb_xtitle_desc.grid(row=8, column=1)
+        self.tb_ytitle_desc.grid(row=9, column=1)
+        self.cb_normalized.grid(row=10, column=1)
 
         self.tb_min.grid(row=3, column=2)
         self.tb_max.grid(row=4, column=2)
         self.tb_bins.grid(row=5, column=2)
         self.tb_dens.grid(row=6, column=2)
+        self.tb_frame.grid(row=7, column=2)
+        self.tb_xtitle.grid(row=8, column=2)
+        self.tb_ytitle.grid(row=9, column=2)
 
-        # Figure
+        # Temp figure
         self.imgtk = ImageTk.PhotoImage(Image.open("temp.png"))
         self.img_label = tk.Label(image=self.imgtk)
         self.img_label.grid(row=2, column=4)
@@ -169,7 +179,13 @@ class Histogram:
         self.tb_dens.delete(0, tk.END)
         self.tb_dens.insert(0, self.dens)
 
-        self.tb_savefile['state'] = "normal"
+        self.tb_frame_desc['state'] = "normal"
+        self.tb_frame['state'] = "normal"
+
+        self.tb_xtitle_desc['state'] = "normal"
+        self.tb_xtitle['state'] = "normal"
+        self.tb_ytitle_desc['state'] = "normal"
+        self.tb_ytitle['state'] = "normal"
 
     def get_data(self):
         """Reading data from file and calculation of main parameters"""
@@ -188,26 +204,22 @@ class Histogram:
         return int(math.floor(math.log10(val))) if val != 0 else 0
 
     def read_values(self):
-        """Reads the values from the entries""" #TODO divide?
+        """Reads the values from the entries"""
         self.beg = float(self.tb_min.get())
         self.end = float(self.tb_max.get())
         self.bins = int(self.tb_bins.get())
         self.dens = int(self.tb_dens.get())
-
-    def format_ticks(self, val):
-        """Transforms value into the scientific format"""
-        order = self.magnitude(val)
-        value = val / 10**order
-        return f'{round(value,2)}E{order}'
+        self.frame = self.tb_frame.get()
+        self.xtitle = self.tb_xtitle.get()
+        self.ytitle = self.tb_ytitle.get()
 
     def number_of_bins(self):
-        # TODO
 
         self.bin = math.ceil(self.wid / (10 ** self.mag))
         self.dx = math.ceil((self.wid / (10 ** self.mag)) / self.bin) * 10 ** self.mag
         self.dens = 1
-        self.beg = round(math.floor(self.min / self.dx) * self.dx,4)
-        self.end = round(math.ceil(self.max / self.dx) * self.dx,4)
+        self.beg = round(math.floor(self.min / self.dx) * self.dx, 4)
+        self.end = round(math.ceil(self.max / self.dx) * self.dx, 4)
 
         # Sturge's rule
         self.bins = int(np.ceil(np.log2(self.len)))
@@ -219,7 +231,7 @@ class Histogram:
         """List of the bins borders"""
         self.bins_list = np.linspace(self.beg, self.end, self.bins + 1)
 
-    def draw_histogram(self):   #TODO nieskonczone
+    def draw_histogram(self):
 
         # Read values from entries
         self.read_values()
@@ -235,16 +247,8 @@ class Histogram:
         # Odczytaj wartości ymax i ymin histogramu
 
         # Rysuj histogram
-        yy, xx, _ = plt.hist(self.data, bins=self.bins_list, density=True, fc='lightgray', ec='black')
+        yy, xx, _ = plt.hist(self.data, bins=self.bins_list, density=self.normalized.get(), fc='lightgray', ec='black')
         ymax, ymin = yy.max(), yy.min()
-
-        # Wprowadzenie zapisu naukowego na osi y i x
-        if self.scientific_format[0]:
-            formatter = plt.FuncFormatter(self.format_ticks)
-            ax.xaxis.set_major_formatter(formatter)
-        if self.scientific_format[1]:
-            formatter = plt.FuncFormatter(self.format_ticks)
-            ax.yaxis.set_major_formatter(formatter)
 
         # Siatka
         plt.grid(axis='y', alpha=0.9)
@@ -257,8 +261,8 @@ class Histogram:
         plt.xticks(np.linspace(self.beg, self.end, (int(self.bins/self.dens) + 1)))
 
         # Oznaczenie osi x, osi y
-        plt.xlabel(self.podpisy[0], fontsize=Histogram.fontsize, weight='bold')
-        plt.ylabel(self.podpisy[1], fontsize=Histogram.fontsize, weight='bold')
+        plt.xlabel(self.xtitle, fontsize=Histogram.fontsize, weight='bold')
+        plt.ylabel(self.ytitle, fontsize=Histogram.fontsize, weight='bold')
 
         # Optymalizacja wielkości wykresu na rysunku
         # plt.subplots_adjust(left=0.22, bottom=0.15, right=0.93, top=0.95)
@@ -271,9 +275,9 @@ class Histogram:
         plt.tick_params(axis='y', labelsize=Histogram.fontsize)
 
         # Dodanie ramek z A/B
-        if self.ramka is not False:
+        if len(str(self.frame)):
             plt.text(self.beg + 1 / 20 * (self.end-self.beg), (ymax - 1 / 10 * (ymax - ymin)),
-                     self.ramka, fontsize=Histogram.fontsize + 14, bbox=dict(fc='white', alpha=0.5))
+                     self.frame, fontsize=Histogram.fontsize + 14, bbox=dict(fc='white', alpha=0.5))
 
         # Wydruk na ekran jeśli output = True
 
@@ -284,5 +288,17 @@ class Histogram:
         self.imgtk = ImageTk.PhotoImage(Image.open("temp.png"))
         self.img_label = tk.Label(image=self.imgtk)
         self.img_label.grid(row=2, column=4)
+
+    @staticmethod
+    def save_histogram():
+        dest = tk.filedialog.askdirectory()
+        name = easygui.enterbox("New name of the file:", "New name", "New_name")
+        new_fpath = os.path.join(dest, '.'.join((name, 'png')))
+        if os.path.exists(new_fpath):
+            tk.messagebox.showerror("UPS!", "Such a file exists in this direction!")
+        else:
+            shutil.copy("temp.png", new_fpath)
+            tk.messagebox.showinfo('SUCCESS', "File saved")
+
 
 h = Histogram()

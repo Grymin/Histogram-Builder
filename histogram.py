@@ -156,6 +156,7 @@ class Histogram:
 
     def switch_activity(self):
         """Function activates the buttons and writes the calculated parameters to the entries"""
+
         self.but_save_hist['state'] = "normal"
         self.but_show['state'] = "normal"
 
@@ -189,9 +190,12 @@ class Histogram:
 
     def get_data(self):
         """Reading data from file and calculation of main parameters"""
+
         self.data = np.genfromtxt(self.fpath, delimiter='\n')
 
     def get_main_par(self):
+        """Calculating main parameters in the data"""
+
         self.max = round(self.data.max(), 4)
         self.min = round(self.data.min(), 4)
         self.wid = round(self.max - self.min, 4)
@@ -201,10 +205,12 @@ class Histogram:
     @staticmethod
     def magnitude(val):
         """Defines order of magnitude - used only for positive numbers, so no abs used"""
+
         return int(math.floor(math.log10(val))) if val != 0 else 0
 
     def read_values(self):
         """Reads the values from the entries"""
+
         self.beg = float(self.tb_min.get())
         self.end = float(self.tb_max.get())
         self.bins = int(self.tb_bins.get())
@@ -214,6 +220,7 @@ class Histogram:
         self.ytitle = self.tb_ytitle.get()
 
     def number_of_bins(self):
+        """Calculates number of the bins"""
 
         self.bin = math.ceil(self.wid / (10 ** self.mag))
         self.dx = math.ceil((self.wid / (10 ** self.mag)) / self.bin) * 10 ** self.mag
@@ -229,6 +236,7 @@ class Histogram:
 
     def list_of_bins(self):
         """List of the bins borders"""
+
         self.bins_list = np.linspace(self.beg, self.end, self.bins + 1)
 
     def draw_histogram(self):
@@ -239,58 +247,42 @@ class Histogram:
         # Actualize list of bins
         self.list_of_bins()
 
-        # Rysowanie histogramu
+        # Draw histogram
         _, ax = plt.subplots(figsize=(7.9, 6))
-        # p = self.figure.gca()
-        # p.hist(self.data, bins=self.bins_list, density=True, fc='lightgray', ec='black')
-
-        # Odczytaj wartości ymax i ymin histogramu
-
-        # Rysuj histogram
         yy, xx, _ = plt.hist(self.data, bins=self.bins_list, density=self.normalized.get(), fc='lightgray', ec='black')
         ymax, ymin = yy.max(), yy.min()
 
-        # Siatka
+        # Grid
         plt.grid(axis='y', alpha=0.9)
         plt.grid(axis='x', alpha=0.9)
 
-        # Min/maks wartości na osi x
         plt.xlim(self.beg, self.end)
 
-        # Wpisanie wartości x
+        # Ticks
         plt.xticks(np.linspace(self.beg, self.end, (int(self.bins/self.dens) + 1)))
 
-        # Oznaczenie osi x, osi y
-        plt.xlabel(self.xtitle, fontsize=Histogram.fontsize, weight='bold')
-        plt.ylabel(self.ytitle, fontsize=Histogram.fontsize, weight='bold')
-
-        # Optymalizacja wielkości wykresu na rysunku
-        # plt.subplots_adjust(left=0.22, bottom=0.15, right=0.93, top=0.95)
-
-        # Czcionka legendy
-        # plt.legend(fontsize=fontsize - 6)
-
-        # Edycja czcionki na osi y
         plt.tick_params(axis='x', labelsize=Histogram.fontsize)
         plt.tick_params(axis='y', labelsize=Histogram.fontsize)
 
-        # Dodanie ramek z A/B
+        # Labels
+        plt.xlabel(self.xtitle, fontsize=Histogram.fontsize, weight='bold')
+        plt.ylabel(self.ytitle, fontsize=Histogram.fontsize, weight='bold')
+
+        # Frame with symbol of the drawing
         if len(str(self.frame)):
             plt.text(self.beg + 1 / 20 * (self.end-self.beg), (ymax - 1 / 10 * (ymax - ymin)),
                      self.frame, fontsize=Histogram.fontsize + 14, bbox=dict(fc='white', alpha=0.5))
 
-        # Wydruk na ekran jeśli output = True
-
-        # Zapisanie samego histogramu w katalogu zdefiniowanym na górze kodu
+        # Saving as temp and showing in self.root
         plt.savefig("temp.png")
-        # plt.show()
-
         self.imgtk = ImageTk.PhotoImage(Image.open("temp.png"))
         self.img_label = tk.Label(image=self.imgtk)
         self.img_label.grid(row=2, column=4)
 
     @staticmethod
     def save_histogram():
+        """Saving histogram"""
+
         dest = tk.filedialog.askdirectory()
         name = easygui.enterbox("New name of the file:", "New name", "New_name")
         new_fpath = os.path.join(dest, '.'.join((name, 'png')))
